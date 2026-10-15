@@ -22,7 +22,7 @@ import {
 import { areAllModelsFresh } from "../../lib/probe-cache.ts";
 import {
 	loadProviderCache,
-	saveProviderCache,
+	saveProviderCacheGuarded,
 } from "../../lib/provider-cache.ts";
 import {
 	trackDetachedSessionStart,
@@ -132,7 +132,7 @@ export function createOllamaProvider(
 				// return before saving so refreshNativeProviderModels' empty-retain
 				// path keeps both the previous catalog AND the previous cache.
 				if (fresh.length === 0) return [];
-				await saveProviderCache(PROVIDER_OLLAMA, fresh);
+				await saveProviderCacheGuarded(PROVIDER_OLLAMA, fresh);
 				return toOllamaModels(enhanceWithCI(fresh, PROVIDER_OLLAMA));
 			},
 			(models) => {
@@ -278,7 +278,16 @@ export function registerOllamaProvider(
 					apiKey,
 					loadProviderCache(PROVIDER_OLLAMA),
 				);
-				await saveProviderCache(PROVIDER_OLLAMA, fresh);
+				// Never persist (or apply) a degenerate fetch: a transient
+				// shrink or empty response keeps the previous cache AND the
+				// live list (#607).
+				if (!(await saveProviderCacheGuarded(PROVIDER_OLLAMA, fresh))) {
+					ctx.ui.notify(
+						`Ollama Cloud refresh returned ${fresh.length} models; keeping the cached list.`,
+						"warning",
+					);
+					return;
+				}
 				applyModelList(fresh);
 				ctx.ui.notify(
 					`Registered ${fresh.length} Ollama Cloud models (refresh complete)`,
