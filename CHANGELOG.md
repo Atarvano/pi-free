@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.8.5] - 2026-10-15
+
 ### Fixed
 
 - **opencode-free works again after Zen's 2026-10-15 endpoint change** — every `opencode-free` turn failed with `403 FreeTierError` ("free tier can only be used from within OpenCode"). OpenCode 1.19.0 sends Zen traffic to `https://opencode.ai/inference/v1`, and `/zen/v1` now refuses all free-tier requests, including ones replayed byte for byte from the CLI. On `/inference/v1` the gate also checks the `x-opencode-request` prefix: `msg_` (the CLI's user-message id) passes, `prt_` gets 403. `opencode-free` now uses `/inference/v1`, `getOpenCodeModelBaseUrl` rewrites stale `/zen/v1` URLs from Pi's catalog and the persisted cache, and request ids use `msg_`. `opencode-go` keeps `/zen/go/v1` ([#613](https://github.com/apmantza/pi-free/issues/613)).
