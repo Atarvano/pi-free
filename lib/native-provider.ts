@@ -310,10 +310,6 @@ export function createNativeOpenAIProvider(
 				stored.free = classifyFree(
 					storedModels as Model<"openai-completions">[],
 				);
-				// Restore loads the persisted (possibly free-view-only)
-				// subset into both slots: stored.all is not the catalog
-				// until a network generation publishes (TLC ToggleB).
-				stored.complete = false;
 			},
 			async () => {
 				const token = nativeCredentialToken(
@@ -334,8 +330,8 @@ export function createNativeOpenAIProvider(
 			(models) => {
 				stored.all = models;
 				stored.free = classifyFree(models as Model<"openai-completions">[]);
-				stored.complete = true;
 			},
+			stored,
 		);
 	}
 
@@ -997,15 +993,30 @@ export async function restoreNativeProviderModels<T extends Model<Api>>(
 	}
 }
 
-/** Refresh, publish, and persist a native provider catalog. */
+/** Refresh, publish, and persist a native provider catalog.
+ *
+ * `stored`, when passed, receives the completeness flag the toggle
+ * notifies on: `false` when a restore publishes a possibly-partial
+ * subset, `true` once a network generation publishes the complete
+ * catalog. Centralized here so bespoke callers cannot forget it (#609);
+ * every provider's `stored` is the same `StoredModels` record the toggle
+ * reads.
+ */
 export async function refreshNativeProviderModels<T extends Model<Api>>(
 	providerId: string,
 	context: RefreshModelsContext,
 	onRestore: (models: T[]) => void,
 	fetchModels: () => Promise<T[]>,
 	onFetched: (models: T[]) => void,
+	stored?: StoredModels,
 ): Promise<void> {
-	await restoreNativeProviderModels(providerId, context, onRestore);
+	await restoreNativeProviderModels<T>(providerId, context, (models) => {
+		// A restore publishes a possibly free-view-only subset, never the
+		// catalog (TLC ToggleB) — mark before delegating so even a
+		// throwing onRestore leaves the safe value.
+		if (stored) stored.complete = false;
+		onRestore(models);
+	});
 	// Offline init (allowNetwork=false) is not an abort: the refresh never ran.
 	if (!context.allowNetwork) return;
 	if (context.signal?.aborted) {
@@ -1052,7 +1063,12 @@ export async function refreshNativeProviderModels<T extends Model<Api>>(
 				providerId,
 				context,
 				persistModels,
-				() => onFetched(models),
+				() => {
+					// Publication ran, so the complete catalog is live:
+					// mark before delegating, same safe-default order.
+					if (stored) stored.complete = true;
+					onFetched(models);
+				},
 			)
 		) {
 			// Telemetry counts the fetched catalog (refresh productivity),

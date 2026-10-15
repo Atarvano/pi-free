@@ -84,6 +84,7 @@ export function createZenmuxProvider(): ZenmuxNativeProvider {
 				stored.all = next;
 				stored.free = fetchedFree;
 			},
+			stored,
 		);
 	}
 

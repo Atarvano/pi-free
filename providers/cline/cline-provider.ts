@@ -207,6 +207,7 @@ export function createClineProvider(): ClineNativeProvider {
 				stored.all = next;
 				stored.free = fetchedFree;
 			},
+			stored,
 		);
 	}
 

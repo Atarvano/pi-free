@@ -135,6 +135,7 @@ export function createKiloProvider(): KiloNativeProvider {
 				stored.all = next;
 				stored.free = fetchedFree;
 			},
+			stored,
 		);
 	}
 
