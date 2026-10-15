@@ -122,7 +122,7 @@ const BUILT_IN_TOGGLE_PROVIDERS: BuiltInToggleConfig[] = [
 		id: "opencode-free",
 		captureFrom: "opencode",
 		showPaidConfigKey: "opencode_free_show_paid",
-		baseUrl: "https://opencode.ai/zen/v1",
+		baseUrl: "https://opencode.ai/inference/v1",
 		api: OPENCODE_DYNAMIC_API,
 		refreshEndpoint: true,
 	},

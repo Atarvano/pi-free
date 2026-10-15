@@ -36,7 +36,7 @@ export const OPENCODE_DYNAMIC_API = "opencode-dynamic" as const;
 const OPENCODE_ANONYMOUS_API_KEY = "public";
 
 const OPENCODE_STATIC_HEADERS = {
-	"User-Agent": "opencode/1.18.18",
+	"User-Agent": "opencode/1.19.0",
 	"x-opencode-client": "cli",
 } as const;
 
@@ -98,11 +98,11 @@ export async function fetchOpenCodeModelIds(
  *
  * OpenCode's server uses checkHeaders to distinguish native CLI requests from
  * third-party clients, and applies a fallback rate limit (~2 req/day, the
- * "freeze") when the identity looks foreign. The real CLI (v1.18.18,
+ * "freeze") when the identity looks foreign. The real CLI (v1.19.0,
  * packages/opencode/src/session/llm/request.ts) sends:
  *
  *   x-opencode-session:  ses_ + descending ULID (26 chars: 12 hex + 14 base62)
- *   x-opencode-request:  prt_ + ascending ULID (a SessionV1 PartID)
+ *   x-opencode-request:  msg_ + ascending ULID (the user message id)
  *   x-opencode-project:  the project id (schema default "global")
  *   x-opencode-client:   "cli" (OPENCODE_CLIENT default)
  *   User-Agent:          opencode/<version>
@@ -143,7 +143,9 @@ function openCodeUlid(descending: boolean): string {
  *
  * OpenCode endpoints require native-format identifiers to receive the full
  * daily rate limit: session ids are `ses_` + descending ULID, request ids are
- * `prt_` + ascending ULID (the CLI sends a PartID as x-opencode-request).
+ * `msg_` + ascending ULID (the CLI sends the user message id as
+ * x-opencode-request). Since 2026-10-15 the free tier answers a `prt_` id
+ * with 403 FreeTierError.
  * Without matching prefixes the server falls back to a ~2 req/day limit.
  */
 export function createOpenCodeSessionTracker() {
@@ -157,7 +159,7 @@ export function createOpenCodeSessionTracker() {
 	}
 
 	function nextRequestId(): string {
-		return "prt_" + openCodeUlid(false);
+		return "msg_" + openCodeUlid(false);
 	}
 
 	return {
@@ -218,6 +220,13 @@ export function resolveOpenCodeModelApi(
 	return "openai-completions";
 }
 
+// The CLI (v1.19.0) sends Zen traffic to /inference/v1. Since 2026-10-15
+// /zen/v1 refuses every free-tier request with 403 FreeTierError, including
+// ones copied byte for byte from the CLI. Captured Pi catalogs and persisted
+// caches still carry /zen/v1, so rewrite it here. /zen/go/v1 is left alone.
+const OPENCODE_ZEN_ROOT = /^https:\/\/opencode\.ai\/zen$/u;
+const OPENCODE_INFERENCE_ROOT = "https://opencode.ai/inference";
+
 export function getOpenCodeModelBaseUrl(
 	_api: NonNullable<Api>,
 	fallbackBaseUrl: string,
@@ -227,7 +236,9 @@ export function getOpenCodeModelBaseUrl(
 	// Older Pi catalogs used /zen/messages for Anthropic models, which now
 	// resolves to the website's HTML 404 page.
 	void _api; // Kept in the helper signature for callers that pass the wire API.
-	const root = fallbackBaseUrl.replace(/\/v1\/?$/u, "");
+	const root = fallbackBaseUrl
+		.replace(/\/v1\/?$/u, "")
+		.replace(OPENCODE_ZEN_ROOT, OPENCODE_INFERENCE_ROOT);
 	return `${root}/v1`;
 }
 

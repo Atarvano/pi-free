@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **opencode-free works again after Zen's 2026-10-15 endpoint change** — every `opencode-free` turn failed with `403 FreeTierError` ("free tier can only be used from within OpenCode"). OpenCode 1.19.0 sends Zen traffic to `https://opencode.ai/inference/v1`, and `/zen/v1` now refuses all free-tier requests, including ones replayed byte for byte from the CLI. On `/inference/v1` the gate also checks the `x-opencode-request` prefix: `msg_` (the CLI's user-message id) passes, `prt_` gets 403. `opencode-free` now uses `/inference/v1`, `getOpenCodeModelBaseUrl` rewrites stale `/zen/v1` URLs from Pi's catalog and the persisted cache, and request ids use `msg_`. `opencode-go` keeps `/zen/go/v1` ([#613](https://github.com/apmantza/pi-free/issues/613)).
+
 - **opencode providers resolve in fresh sessions, subagents, and `--list-models`** — `opencode-free`/`opencode-go` previously registered only inside the async `session_start` capture, so anything resolving a model before it completed failed with `Model "opencode-free/..." not found`. Every capture/refresh now persists its catalog to `~/.pi/opencode-catalog-cache.json` (overridable via `PI_FREE_OPENCODE_CACHE_FILE`), and extension load registers opencode providers synchronously from that cache — same flush timing as native providers. On a cache miss (first run) the sync step is a no-op and the async path self-heals the cache for the next process. Session headers are re-stamped per process; the async capture still replaces the state seconds later.
 
 ## [2.8.4] - 2026-09-27

@@ -239,7 +239,7 @@ describe("built-in provider toggles", () => {
 		// returned and the initial capture can still register its baseline.
 		await settleDetachedCapture();
 		expect(fetchMock).toHaveBeenCalledWith(
-			"https://opencode.ai/zen/v1/models",
+			"https://opencode.ai/inference/v1/models",
 			expect.objectContaining({ signal: expect.any(AbortSignal) }),
 		);
 		expect(mockRegisterProvider).toHaveBeenCalledTimes(1);
