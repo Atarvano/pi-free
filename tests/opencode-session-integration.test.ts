@@ -59,6 +59,24 @@ describe("opencode-session fallback resolution", () => {
 		).toBe("https://opencode.ai/zen/go/v1");
 	});
 
+	it("routes free-tier Zen URLs to /inference/v1 (#613)", () => {
+		for (const url of [
+			"https://opencode.ai/zen/v1",
+			"https://opencode.ai/zen/v1/",
+			"https://opencode.ai/zen",
+		]) {
+			expect(getOpenCodeModelBaseUrl("openai-completions", url)).toBe(
+				"https://opencode.ai/inference/v1",
+			);
+		}
+		expect(
+			getOpenCodeModelBaseUrl(
+				"openai-completions",
+				"https://opencode.ai/inference/v1",
+			),
+		).toBe("https://opencode.ai/inference/v1");
+	});
+
 	it("generates CLI-compatible session and request headers", () => {
 		const tracker = createOpenCodeSessionTracker();
 		const first = createOpenCodeHeaders(tracker);
@@ -70,14 +88,14 @@ describe("opencode-session fallback resolution", () => {
 			/^ses_[0-9a-f]{12}[0-9A-Za-z]{14}$/,
 		);
 		expect(first["x-opencode-request"]).toMatch(
-			/^prt_[0-9a-f]{12}[0-9A-Za-z]{14}$/,
+			/^msg_[0-9a-f]{12}[0-9A-Za-z]{14}$/,
 		);
 		expect(first["x-opencode-project"]).toBe("global");
 		expect(second["x-opencode-session"]).toBe(first["x-opencode-session"]);
 		expect(second["x-opencode-request"]).not.toBe(first["x-opencode-request"]);
 	});
 
-	it("encodes ses descending and prt ascending with the same ms base", () => {
+	it("encodes ses descending and msg ascending with the same ms base", () => {
 		// Freeze the clock so both ids land in the same millisecond. Without
 		// this the assertions are timing-sensitive: if Date.now() ticks between
 		// the getSessionId() and nextRequestId() calls, the ULID counter resets
@@ -92,20 +110,20 @@ describe("opencode-session fallback resolution", () => {
 			// and `timestamp<<12|counter` (ascending). Two ids created in the same
 			// millisecond must share the same timestamp base, with the per-call
 			// counter advancing in the low 12 bits — ses first (counter=1), then
-			// prt (counter=2). A bug that swapped the directions (or dropped the
+			// msg (counter=2). A bug that swapped the directions (or dropped the
 			// complement) would fail here even though the shape assertions pass.
 			const tracker = createOpenCodeSessionTracker();
 			const session = tracker.getSessionId().slice(4); // strip ses_
-			const request = tracker.nextRequestId().slice(4); // strip prt_
+			const request = tracker.nextRequestId().slice(4); // strip msg_
 
 			const sesComplement =
 				~BigInt(`0x${session.slice(0, 12)}`) & 0xffffffffffffn;
-			const prtTime = BigInt(`0x${request.slice(0, 12)}`);
+			const msgTime = BigInt(`0x${request.slice(0, 12)}`);
 
 			// Same timestamp base (high 36 bits = milliseconds).
-			expect(prtTime >> 12n).toBe(sesComplement >> 12n);
-			// Counter advanced monotonically within the same ms (ses=1, prt=2).
-			expect(prtTime & 0xfffn).toBe((sesComplement & 0xfffn) + 1n);
+			expect(msgTime >> 12n).toBe(sesComplement >> 12n);
+			// Counter advanced monotonically within the same ms (ses=1, msg=2).
+			expect(msgTime & 0xfffn).toBe((sesComplement & 0xfffn) + 1n);
 
 			// Random suffixes are full-length (14 base62 chars) on both.
 			expect(session.slice(12)).toHaveLength(14);
