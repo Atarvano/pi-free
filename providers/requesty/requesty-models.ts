@@ -62,6 +62,12 @@ export function mapRequestyModel(
 
 	const inputPrice = asNumber(entry.input_price);
 	const outputPrice = asNumber(entry.output_price);
+	// SAFETY: a missing/non-numeric price is a parse miss, not a zero price.
+	// Defaulting to 0 without the marker lets Route A classify a paid model
+	// as free whenever any sibling exposes pricing (#610). Both standard
+	// prices must parse; cache prices are informational only and never gate
+	// the free/paid verdict.
+	const pricingKnown = inputPrice !== undefined && outputPrice !== undefined;
 
 	return {
 		id: entry.id,
@@ -76,7 +82,8 @@ export function mapRequestyModel(
 		},
 		contextWindow: asNumber(entry.context_window) ?? FALLBACK_CONTEXT_WINDOW,
 		maxTokens: asNumber(entry.max_output_tokens) || 4_096,
-	};
+		_pricingKnown: pricingKnown,
+	} as ChatModelConfig & { _pricingKnown?: boolean };
 }
 
 /**

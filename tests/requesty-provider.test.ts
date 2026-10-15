@@ -8,6 +8,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { mapRequestyModel } from "../providers/requesty/requesty-models.ts";
+import { isFreeModel } from "../lib/registry.ts";
 
 function catalogEntry(overrides: Record<string, unknown> = {}) {
 	return {
@@ -79,6 +80,65 @@ describe("mapRequestyModel", () => {
 
 	it("filters out entries without an id", () => {
 		expect(mapRequestyModel(catalogEntry({ id: undefined }))).toBeUndefined();
+	});
+
+	it("stamps _pricingKnown only when both standard prices parse (#610)", () => {
+		expect(
+			(mapRequestyModel(catalogEntry()) as { _pricingKnown?: boolean })
+				._pricingKnown,
+		).toBe(true);
+		expect(
+			(
+				mapRequestyModel(catalogEntry({ input_price: undefined })) as {
+					_pricingKnown?: boolean;
+				}
+			)._pricingKnown,
+		).toBe(false);
+		expect(
+			(
+				mapRequestyModel(
+					catalogEntry({ input_price: "0", output_price: null }),
+				) as { _pricingKnown?: boolean }
+			)._pricingKnown,
+		).toBe(false);
+	});
+
+	it("a priceless paid-named entry is not free beside priced siblings (#610)", () => {
+		const priced = mapRequestyModel(
+			catalogEntry({ id: "paid-workhorse", input_price: 2, output_price: 3 }),
+		)!;
+		const priceless = mapRequestyModel(
+			catalogEntry({
+				id: "mystery-model",
+				input_price: undefined,
+				output_price: undefined,
+			}),
+		)!;
+		const all = [priced, priceless] as Parameters<typeof isFreeModel>[0][];
+		// Pre-fix the priceless entry defaulted to cost 0/0 with no marker
+		// and Route A classified it free: paid models leaked into the free
+		// view whenever any sibling exposed pricing.
+		expect(isFreeModel({ ...priceless, provider: "requesty" }, all)).toBe(
+			false,
+		);
+		expect(isFreeModel({ ...priced, provider: "requesty" }, all)).toBe(false);
+	});
+
+	it("a priceless free-named entry stays free via name-only fallback", () => {
+		const priced = mapRequestyModel(
+			catalogEntry({ id: "paid-workhorse", input_price: 2, output_price: 3 }),
+		)!;
+		const pricelessFree = mapRequestyModel(
+			catalogEntry({
+				id: "mystery-free",
+				input_price: undefined,
+				output_price: undefined,
+			}),
+		)!;
+		const all = [priced, pricelessFree] as Parameters<typeof isFreeModel>[0][];
+		expect(isFreeModel({ ...pricelessFree, provider: "requesty" }, all)).toBe(
+			true,
+		);
 	});
 });
 
