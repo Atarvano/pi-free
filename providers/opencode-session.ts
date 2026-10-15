@@ -36,7 +36,7 @@ export const OPENCODE_DYNAMIC_API = "opencode-dynamic" as const;
 const OPENCODE_ANONYMOUS_API_KEY = "public";
 
 const OPENCODE_STATIC_HEADERS = {
-	"User-Agent": "opencode/1.18.18",
+	"User-Agent": "opencode/1.19.0",
 	"x-opencode-client": "cli",
 } as const;
 
