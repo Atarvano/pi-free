@@ -28,7 +28,10 @@ vi.mock("node:fs", () => {
 		})),
 		copyFileSync: vi.fn(),
 		existsSync: vi.fn((path: string) => mockData.has(path)),
+		fsyncSync: vi.fn(),
+		closeSync: vi.fn(),
 		mkdirSync: vi.fn(),
+		openSync: vi.fn(() => 999),
 		readFileSync: vi.fn((path: string) => mockData.get(path) ?? ""),
 		statSync: vi.fn((path: string) => {
 			if (!mockData.has(path)) {
@@ -41,6 +44,24 @@ vi.mock("node:fs", () => {
 		writeFileSync: vi.fn((path: string, content: string) => {
 			mockData.set(path, content);
 			mockMtime.set(path, (mockMtime.get(path) ?? 0) + 1);
+		}),
+		renameSync: vi.fn((src: string, dest: string) => {
+			// Atomic-write seam: publishing the tmp file bumps the
+			// destination mtime like a real rename onto a new inode, so
+			// the mtime memo invalidates exactly as in production.
+			mockData.set(dest, mockData.get(src) ?? "");
+			mockData.delete(src);
+			mockMtime.set(dest, Date.now());
+		}),
+		rmSync: vi.fn((path: string) => {
+			mockData.delete(path);
+			mockMtime.delete(path);
+			for (const key of mockData.keys()) {
+				if (key === path || key.startsWith(`${path}/`)) {
+					mockData.delete(key);
+					mockMtime.delete(key);
+				}
+			}
 		}),
 		__mockData: mockData,
 		__mockMtime: mockMtime,

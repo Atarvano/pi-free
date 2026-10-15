@@ -32,10 +32,25 @@ vi.mock("node:fs", () => {
 			mockData.set(dest, mockData.get(src) ?? "");
 		}),
 		existsSync: vi.fn((path: string) => mockData.has(path)),
+		fsyncSync: vi.fn(),
+		closeSync: vi.fn(),
 		mkdirSync: vi.fn(),
+		openSync: vi.fn(() => 999),
 		readFileSync: vi.fn((path: string) => mockData.get(path) ?? ""),
 		writeFileSync: vi.fn((path: string, content: string) => {
 			mockData.set(path, content);
+		}),
+		renameSync: vi.fn((src: string, dest: string) => {
+			// Atomic-write seam: the tmp write lands in the map, the rename
+			// publishes it — mirrors the real tmp+rename contract.
+			mockData.set(dest, mockData.get(src) ?? "");
+			mockData.delete(src);
+		}),
+		rmSync: vi.fn((path: string) => {
+			mockData.delete(path);
+			for (const key of mockData.keys()) {
+				if (key === path || key.startsWith(`${path}/`)) mockData.delete(key);
+			}
 		}),
 		__mockData: mockData,
 	};

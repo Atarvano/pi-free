@@ -15,7 +15,8 @@
  *    awaits (capture wait, registry ops, serialized config write), so two
  *    rapid toggles can interleave read/read/write/write on the same
  *    stale read: the second flip collapses (net one flip for two
- *    commands). No mutex exists; updateConfig only serializes the writes.
+ *    commands). Config RMW now runs inside the cross-process file lock
+ *    with the read taken inside it (lib/atomic-file.ts, #611).
  *  - GlobalFlip re-resolves every entry (the applyGlobalFilter loop) with
  *    a FRESH resolveModelView per entry, so an override written mid-loop
  *    still governs its entry; explicit choices survive global flips.
@@ -135,8 +136,10 @@ NoPaidLeak ==
 \* P3 (documents the TOCTOU, SessionA-style): two rapid toggles collapse
  \* to one net flip when both read before either writes. At quiescence
  \* (no in-flight intent, all resolved) reads minus applied flips is even;
- \* the collapse leaves it odd. No mutex exists in code (updateConfig only
- \* serializes the writes); fix direction is read-inside-lock, unimplemented.
+ \* the collapse leaves it odd. Config RMW now runs inside the
+ \* cross-process file lock with read-inside-lock (lib/atomic-file.ts,
+ \* #611); the parity check below is retained as the pin for the
+ \* pre-fix TOCTOU shape.
 FlipParity ==
     (\A p \in Providers : intent[p] = "none" /\ stale[p] = FALSE)
         => \A p \in Providers : (reads[p] - changes[p]) % 2 = 0

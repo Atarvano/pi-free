@@ -15,8 +15,8 @@ import {
 	existsSync,
 	readFileSync,
 	statSync,
-	writeFileSync,
 } from "node:fs";
+import { withFileLock, writeFileAtomicSync } from "./lib/atomic-file.ts";
 import { join } from "node:path";
 import {
 	PROVIDER_ANYAPI,
@@ -269,7 +269,7 @@ const CONFIG_PATH = join(PI_DATA_DIR, "free.json");
 // Memoize the parsed config: re-read+parse only when the file's mtime changes.
 // loadConfigFile() is called on every config getter (dozens of times at
 // startup); this avoids repeated readFileSync + JSON.parse of the same file.
-// Every write path uses writeFileSync (which bumps mtime), so the mtime check
+// Every write path is atomic (tmp + rename with a new inode, which bumps mtime), so the mtime check
 // auto-invalidates after saveConfig()/updateConfig()/ensureConfigFile().
 let cachedConfig: PiFreeConfig | null = null;
 let cachedConfigMtime = -1;
@@ -288,12 +288,7 @@ function ensureConfigFile(): void {
 				// template so the extension can start. The original bytes are
 				// preserved in the timestamped backup for recovery.
 				backupCorruptConfigFile();
-				writeFileSync(
-					CONFIG_PATH,
-					`${JSON.stringify(CONFIG_TEMPLATE, null, 2)}\n`,
-					"utf8",
-				);
-				restrictConfigFilePermissions();
+				writeConfigFile(`${JSON.stringify(CONFIG_TEMPLATE, null, 2)}\n`);
 				_logger.warn(
 					"Config file was corrupt and has been reset from template; backup preserved",
 					{ path: CONFIG_PATH },
@@ -306,20 +301,10 @@ function ensureConfigFile(): void {
 			// Merge with template to add any missing keys, preserving existing values
 			const merged = { ...CONFIG_TEMPLATE, ...existing };
 			if (JSON.stringify(merged) !== JSON.stringify(existing)) {
-				writeFileSync(
-					CONFIG_PATH,
-					`${JSON.stringify(merged, null, 2)}\n`,
-					"utf8",
-				);
-				restrictConfigFilePermissions();
+				writeConfigFile(`${JSON.stringify(merged, null, 2)}\n`);
 			}
 		} else {
-			writeFileSync(
-				CONFIG_PATH,
-				`${JSON.stringify(CONFIG_TEMPLATE, null, 2)}\n`,
-				"utf8",
-			);
-			restrictConfigFilePermissions();
+			writeConfigFile(`${JSON.stringify(CONFIG_TEMPLATE, null, 2)}\n`);
 		}
 	} catch (err) {
 		_logger.warn("Could not create config file", {
@@ -1065,90 +1050,78 @@ export function applyHidden<T extends { id: string }>(
 // Persistence
 // =============================================================================
 
+/**
+ * Write the config file atomically (tmp + rename, #611) with owner-only
+ * permissions. Every CONFIG_PATH write funnels through here — never raw writes.
+ */
+function writeConfigFile(contents: string): void {
+	writeFileAtomicSync(CONFIG_PATH, contents, 0o600);
+	restrictConfigFilePermissions();
+}
+
 export async function saveConfig(updates: ConfigPatch): Promise<void> {
-	const release = await _configLock.acquire();
-	try {
-		// Read the raw file content — never use loadConfigFile() here because
-		// if the file is unparsable, loadConfigFile() returns {} which would
-		// cause us to write a partial config and WIPE all existing keys.
-		const raw = readRawConfigFile();
-		if (raw === undefined) {
-			// File doesn't exist or can't be read — start from template
-			const merged = { ...CONFIG_TEMPLATE, ...updates };
-			writeFileSync(
-				CONFIG_PATH,
-				`${JSON.stringify(merged, null, 2)}\n`,
-				"utf8",
-			);
-			restrictConfigFilePermissions();
-			_logger.info("Config saved (new file)", {
+	return withFileLock(CONFIG_PATH, () => {
+		try {
+			// Read the raw file content — never use loadConfigFile() here because
+			// if the file is unparsable, loadConfigFile() returns {} which would
+			// cause us to write a partial config and WIPE all existing keys.
+			const raw = readRawConfigFile();
+			if (raw === undefined) {
+				// File doesn't exist or can't be read — start from template
+				const merged = { ...CONFIG_TEMPLATE, ...updates };
+				writeConfigFile(`${JSON.stringify(merged, null, 2)}\n`);
+				_logger.info("Config saved (new file)", {
+					path: CONFIG_PATH,
+					keys: Object.keys(updates),
+				});
+				return;
+			}
+
+			let base: PiFreeConfig;
+			try {
+				base = JSON.parse(raw, safeJsonReviver) as PiFreeConfig;
+			} catch (parseErr) {
+				// File exists but is corrupt. Back it up first, then write a fresh
+				// config so the user's original bytes are preserved for recovery.
+				backupCorruptConfigFile();
+				base = { ...CONFIG_TEMPLATE };
+				_logger.warn(
+					"Config file was corrupt; a backup was created and the next save will overwrite it",
+					{
+						path: CONFIG_PATH,
+						error:
+							parseErr instanceof Error ? parseErr.message : String(parseErr),
+					},
+				);
+			}
+
+			const merged = { ...base, ...updates };
+			writeConfigFile(`${JSON.stringify(merged, null, 2)}\n`);
+			_logger.info("Config saved", {
 				path: CONFIG_PATH,
 				keys: Object.keys(updates),
 			});
-			return;
+		} catch (err) {
+			_logger.error("Failed to save config", {
+				path: CONFIG_PATH,
+				error: err instanceof Error ? err.message : String(err),
+			});
 		}
-
-		let base: PiFreeConfig;
-		try {
-			base = JSON.parse(raw, safeJsonReviver) as PiFreeConfig;
-		} catch (parseErr) {
-			// File exists but is corrupt. Back it up first, then write a fresh
-			// config so the user's original bytes are preserved for recovery.
-			backupCorruptConfigFile();
-			base = { ...CONFIG_TEMPLATE };
-			_logger.warn(
-				"Config file was corrupt; a backup was created and the next save will overwrite it",
-				{
-					path: CONFIG_PATH,
-					error:
-						parseErr instanceof Error ? parseErr.message : String(parseErr),
-				},
-			);
-		}
-
-		const merged = { ...base, ...updates };
-		writeFileSync(CONFIG_PATH, `${JSON.stringify(merged, null, 2)}\n`, "utf8");
-		restrictConfigFilePermissions();
-		_logger.info("Config saved", {
-			path: CONFIG_PATH,
-			keys: Object.keys(updates),
-		});
-	} catch (err) {
-		_logger.error("Failed to save config", {
-			path: CONFIG_PATH,
-			error: err instanceof Error ? err.message : String(err),
-		});
-	} finally {
-		release();
-	}
+	});
 }
 
 /**
- * Serialise all config RMW operations to prevent concurrent updates
- * from clobbering each other (e.g. two provider probes finishing at the
- * same time both writing hidden_models and losing the other's update).
+ * All config read-modify-write operations run inside the cross-process file
+ * lock (`withFileLock`, lib/atomic-file.ts), which also serialises callers
+ * within this process — the old in-process-only `ConfigLock` is gone (#611).
  */
-class ConfigLock {
-	private promise: Promise<void> = Promise.resolve();
-
-	async acquire(): Promise<() => void> {
-		let release: () => void = () => {};
-		const newPromise = new Promise<void>((unlock) => {
-			release = unlock;
-		});
-		const previous = this.promise;
-		this.promise = previous.then(() => newPromise);
-		await previous;
-		return release;
-	}
-}
-
-const _configLock = new ConfigLock();
 
 /**
  * Atomically read-modify-write the config file. The updater function
  * receives the current parsed config and returns the partial updates to
- * merge. Concurrent calls are serialised by an internal lock.
+ * merge. Concurrent calls — including across processes — are serialised by
+ * the cross-process file lock, and the updater always sees a fresh disk
+ * read taken inside the lock.
  *
  * If the config file is corrupt, a backup is created first and the updater
  * is applied to a fresh template (the original bytes are preserved for
@@ -1157,60 +1130,53 @@ const _configLock = new ConfigLock();
 export async function updateConfig(
 	updater: (current: PiFreeConfig) => ConfigPatch,
 ): Promise<void> {
-	const release = await _configLock.acquire();
-	try {
-		const raw = readRawConfigFile();
-		if (raw === undefined) {
-			// File doesn't exist — start from template, apply updater once
-			const updated = updater({ ...CONFIG_TEMPLATE });
-			const merged = { ...CONFIG_TEMPLATE, ...updated };
-			writeFileSync(
-				CONFIG_PATH,
-				`${JSON.stringify(merged, null, 2)}\n`,
-				"utf8",
-			);
-			restrictConfigFilePermissions();
-			_logger.info("Config updated (new file)", {
+	return withFileLock(CONFIG_PATH, () => {
+		try {
+			const raw = readRawConfigFile();
+			if (raw === undefined) {
+				// File doesn't exist — start from template, apply updater once
+				const updated = updater({ ...CONFIG_TEMPLATE });
+				const merged = { ...CONFIG_TEMPLATE, ...updated };
+				writeConfigFile(`${JSON.stringify(merged, null, 2)}\n`);
+				_logger.info("Config updated (new file)", {
+					path: CONFIG_PATH,
+					keys: Object.keys(updated),
+				});
+				return;
+			}
+
+			let existing: PiFreeConfig;
+			try {
+				existing = JSON.parse(raw, safeJsonReviver) as PiFreeConfig;
+			} catch (parseErr) {
+				// File exists but is corrupt. Back it up first, then continue with
+				// the template as the base so the requested update can proceed.
+				backupCorruptConfigFile();
+				existing = { ...CONFIG_TEMPLATE };
+				_logger.warn(
+					"Config file was corrupt; a backup was created and the update will overwrite it",
+					{
+						path: CONFIG_PATH,
+						error:
+							parseErr instanceof Error ? parseErr.message : String(parseErr),
+					},
+				);
+			}
+
+			const updated = updater(existing);
+			const merged = { ...existing, ...updated };
+			writeConfigFile(`${JSON.stringify(merged, null, 2)}\n`);
+			_logger.info("Config updated", {
 				path: CONFIG_PATH,
 				keys: Object.keys(updated),
 			});
-			return;
+		} catch (err) {
+			_logger.error("Failed to update config", {
+				path: CONFIG_PATH,
+				error: err instanceof Error ? err.message : String(err),
+			});
 		}
-
-		let existing: PiFreeConfig;
-		try {
-			existing = JSON.parse(raw, safeJsonReviver) as PiFreeConfig;
-		} catch (parseErr) {
-			// File exists but is corrupt. Back it up first, then continue with
-			// the template as the base so the requested update can proceed.
-			backupCorruptConfigFile();
-			existing = { ...CONFIG_TEMPLATE };
-			_logger.warn(
-				"Config file was corrupt; a backup was created and the update will overwrite it",
-				{
-					path: CONFIG_PATH,
-					error:
-						parseErr instanceof Error ? parseErr.message : String(parseErr),
-				},
-			);
-		}
-
-		const updated = updater(existing);
-		const merged = { ...existing, ...updated };
-		writeFileSync(CONFIG_PATH, `${JSON.stringify(merged, null, 2)}\n`, "utf8");
-		restrictConfigFilePermissions();
-		_logger.info("Config updated", {
-			path: CONFIG_PATH,
-			keys: Object.keys(updated),
-		});
-	} catch (err) {
-		_logger.error("Failed to update config", {
-			path: CONFIG_PATH,
-			error: err instanceof Error ? err.message : String(err),
-		});
-	} finally {
-		release();
-	}
+	});
 }
 
 // =============================================================================
