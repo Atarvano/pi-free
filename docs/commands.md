@@ -19,6 +19,8 @@ All slash commands provided by pi-free.
 
 Run `/toggle-{provider}` to switch between a provider's free/basic view and its full catalog. The preference is saved in `~/.pi/free.json`.
 
+To remove a provider from the model picker entirely, run `/hide-provider <provider-id>`; `/show-provider <provider-id>` restores it. Hiding writes a `provider-id/*` wildcard into `hidden_models`, so it composes with per-model hiding and takes effect immediately (the current free/all view is re-applied).
+
 | Command | Provider | Surface |
 | --- | --- | --- |
 | `/toggle-kilo` | Kilo | Native |

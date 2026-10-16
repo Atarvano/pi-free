@@ -23,7 +23,11 @@ import {
 	timeProvider,
 } from "./lib/startup-timing.ts";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { clearModelViewOverrides } from "./config.ts";
+import {
+	clearModelViewOverrides,
+	isProviderHidden,
+	setProviderHidden,
+} from "./config.ts";
 import { setupBuiltInProviderToggles } from "./lib/built-in-toggle.ts";
 import { recordAction } from "./lib/action-log.ts";
 import { createLogger, flushLogsSync, withRunId } from "./lib/logger.ts";
@@ -192,6 +196,67 @@ function setupGlobalCommands(pi: ExtensionAPI) {
 		recordAction(
 			"toggle",
 			`global free-only ${current ? "ON→OFF" : "OFF→ON"} (${providerCount} providers)`,
+		);
+	}
+
+	// /hide-provider <id> — hide every model of one provider (#572).
+	// The models stay configured; they vanish from the picker until
+	// /show-provider restores them. One shared store with per-model
+	// hidden_models, so both share the cross-process config lock.
+	pi.registerCommand("hide-provider", {
+		description: "Hide all models of a provider (usage: /hide-provider <id>)",
+		handler: async (args, ctx) => {
+			await setProviderVisibility(args, true, ctx);
+		},
+	});
+
+	// /show-provider <id> — reveal a provider hidden by /hide-provider.
+	pi.registerCommand("show-provider", {
+		description: "Show all models of a provider (usage: /show-provider <id>)",
+		handler: async (args, ctx) => {
+			await setProviderVisibility(args, false, ctx);
+		},
+	});
+
+	async function setProviderVisibility(
+		args: string,
+		hidden: boolean,
+		ctx: {
+			ui: {
+				notify(message: string, type?: "info" | "warning" | "error"): void;
+			};
+		},
+	): Promise<void> {
+		const providerId = args.trim().split(/\s+/u)[0] ?? "";
+		if (!providerId) {
+			ctx.ui.notify(
+				`Usage: /${hidden ? "hide" : "show"}-provider <provider-id>`,
+				"warning",
+			);
+			return;
+		}
+		if (!getProviderRegistry().has(providerId)) {
+			ctx.ui.notify(`Unknown provider: ${providerId}`, "warning");
+			return;
+		}
+		if (isProviderHidden(providerId) === hidden) {
+			ctx.ui.notify(
+				`${providerId} is already ${hidden ? "hidden" : "visible"}`,
+				"info",
+			);
+			return;
+		}
+		await setProviderHidden(providerId, hidden);
+		// Re-apply the current view so the change is live: native providers
+		// re-run filterModels (which calls applyHidden) on invalidate.
+		applyGlobalFilter(getGlobalFreeOnly());
+		ctx.ui.notify(
+			`${providerId}: ${hidden ? "hidden from the model picker" : "visible again"}`,
+			"info",
+		);
+		recordAction(
+			"toggle",
+			`provider ${providerId} ${hidden ? "hidden" : "shown"}`,
 		);
 	}
 
