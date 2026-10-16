@@ -28,6 +28,7 @@ export const PROVIDER_REQUESTY = "requesty";
 export const PROVIDER_STEPFUN = "stepfun";
 export const PROVIDER_GMI = "gmi";
 export const PROVIDER_AGNES = "agnes";
+export const PROVIDER_CODEBUDDY = "codebuddy";
 export const PROVIDER_VENICE = "venice";
 export const PROVIDER_INFRON = "infron";
 export const PROVIDER_MERGE = "merge";
@@ -78,6 +79,8 @@ export const BASE_URL_STEPFUN = "https://api.stepfun.ai/step_plan/v1";
 export const BASE_URL_GMI = "https://api.gmi-serving.com/v1";
 /** Agnes AI OpenAI-compatible free gateway base URL. */
 export const BASE_URL_AGNES = "https://apihub.agnes-ai.com/v1";
+/** CodeBuddy International (Tencent) OpenAI-compatible chat gateway base URL. */
+export const BASE_URL_CODEBUDDY = "https://www.codebuddy.ai/v2";
 /** Venice AI OpenAI-compatible inference API base URL. */
 export const BASE_URL_VENICE = "https://api.venice.ai/api/v1";
 /** Infron AI unified gateway (OneRouter) OpenAI-compatible API base URL. */
@@ -130,6 +133,8 @@ export const STARTUP_FETCH_DEADLINE_MS: number = (() => {
 })();
 
 export const KILO_POLL_INTERVAL_MS = 3_000;
+/** CodeBuddy plugin OAuth token poll interval (matches the IDE plugin). */
+export const CODEBUDDY_POLL_INTERVAL_MS = 5_000;
 export const KILO_TOKEN_EXPIRATION_MS = 365 * 24 * 60 * 60 * 1000; // 1 year
 
 // =============================================================================

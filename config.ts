@@ -29,6 +29,7 @@ import {
 	PROVIDER_STEPFUN,
 	PROVIDER_GMI,
 	PROVIDER_AGNES,
+	PROVIDER_CODEBUDDY,
 	PROVIDER_KILO,
 	PROVIDER_OLLAMA,
 	PROVIDER_OPENCODE,
@@ -122,6 +123,7 @@ interface PiFreeConfig {
 	stepfun_api_key?: string;
 	gmi_api_key?: string;
 	agnes_api_key?: string;
+	codebuddy_api_key?: string;
 	tokenrouter_api_key?: string;
 	anyapi_api_key?: string;
 	bai_api_key?: string;
@@ -151,6 +153,7 @@ interface PiFreeConfig {
 	stepfun_show_paid?: boolean;
 	gmi_show_paid?: boolean;
 	agnes_show_paid?: boolean;
+	codebuddy_show_paid?: boolean;
 	tokenrouter_show_paid?: boolean;
 	anyapi_show_paid?: boolean;
 	bai_show_paid?: boolean;
@@ -210,6 +213,7 @@ const CONFIG_TEMPLATE: PiFreeConfig = {
 	stepfun_api_key: "",
 	gmi_api_key: "",
 	agnes_api_key: "",
+	codebuddy_api_key: "",
 	tokenrouter_api_key: "",
 	anyapi_api_key: "",
 	bai_api_key: "",
@@ -240,6 +244,7 @@ const CONFIG_TEMPLATE: PiFreeConfig = {
 	stepfun_show_paid: true,
 	gmi_show_paid: true,
 	agnes_show_paid: false,
+	codebuddy_show_paid: false,
 	tokenrouter_show_paid: false,
 	anyapi_show_paid: false,
 	bai_show_paid: false,
@@ -526,6 +531,11 @@ const PROVIDER_META: readonly ProviderMeta[] = [
 		prefix: "AGNES",
 		showPaidKey: "agnes_show_paid",
 	},
+	{
+		id: PROVIDER_CODEBUDDY,
+		prefix: "CODEBUDDY",
+		showPaidKey: "codebuddy_show_paid",
+	},
 	{ id: PROVIDER_OLLAMA, prefix: "OLLAMA", showPaidKey: "ollama_show_paid" },
 	{
 		id: PROVIDER_OPENROUTER,
@@ -808,6 +818,13 @@ export function getAgnesShowPaid(): boolean {
 	return resolveBool("AGNES_SHOW_PAID", loadConfigFile().agnes_show_paid);
 }
 
+export function getCodebuddyShowPaid(): boolean {
+	return resolveBool(
+		"CODEBUDDY_SHOW_PAID",
+		loadConfigFile().codebuddy_show_paid,
+	);
+}
+
 export function getOllamaShowPaid(): boolean {
 	return resolveBool("OLLAMA_SHOW_PAID", loadConfigFile().ollama_show_paid);
 }
@@ -933,6 +950,10 @@ export function getGmiApiKey(): string | undefined {
 
 export function getAgnesApiKey(): string | undefined {
 	return resolve("AGNES_API_KEY", loadConfigFile().agnes_api_key);
+}
+
+export function getCodebuddyApiKey(): string | undefined {
+	return resolve("CODEBUDDY_API_KEY", loadConfigFile().codebuddy_api_key);
 }
 
 export function getTokenrouterApiKey(): string | undefined {

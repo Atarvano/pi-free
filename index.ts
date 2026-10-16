@@ -68,6 +68,7 @@ import requesty from "./providers/requesty/requesty.ts";
 import stepfun from "./providers/stepfun/stepfun.ts";
 import gmi from "./providers/gmi/gmi.ts";
 import agnes from "./providers/agnes/agnes.ts";
+import codebuddy from "./providers/codebuddy/codebuddy.ts";
 import sambanova from "./providers/sambanova/sambanova.ts";
 import novita from "./providers/novita/novita.ts";
 import venice from "./providers/venice/venice.ts";
@@ -111,6 +112,7 @@ const UNIQUE_PROVIDERS: ReadonlyArray<(pi: ExtensionAPI) => Promise<void>> = [
 	stepfun,
 	gmi,
 	agnes,
+	codebuddy,
 	routeway,
 	opengateway,
 	tokenRouter,

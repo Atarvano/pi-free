@@ -28,6 +28,7 @@ These are the pi-free config keys and their environment variables:
 | `requesty_api_key` | `REQUESTY_API_KEY` |
 | `gmi_api_key` | `GMI_API_KEY` |
 | `agnes_api_key` | `AGNES_API_KEY` |
+| `codebuddy_api_key` | `CODEBUDDY_API_KEY` |
 | `venice_api_key` | `VENICE_API_KEY` |
 | `infron_api_key` | `INFRON_API_KEY` |
 | `merge_api_key` | `MERGE_API_KEY` |

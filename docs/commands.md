@@ -46,6 +46,7 @@ To remove a provider from the model picker entirely, run `/hide-provider <provid
 | `/toggle-fastrouter` | FastRouter | Native |
 | `/toggle-gmi` | GMI Cloud | Native |
 | `/toggle-agnes` | Agnes AI | Native |
+| `/toggle-codebuddy` | CodeBuddy | Native |
 | `/toggle-requesty` | Requesty | Native |
 | `/toggle-venice` | Venice AI | Native |
 | `/toggle-infron` | Infron AI | Native |
