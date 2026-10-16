@@ -84,6 +84,7 @@ export function createQoderProvider(): QoderNativeProvider {
 				stored.all = catalog;
 				stored.free = catalog.filter((model) => isQoderFreeModel(model));
 			},
+			stored,
 		);
 	}
 

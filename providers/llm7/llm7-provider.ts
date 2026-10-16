@@ -132,6 +132,7 @@ export function createLlm7Provider(): Llm7NativeProvider {
 				stored.all = next;
 				stored.free = fetchedFree;
 			},
+			stored,
 		);
 	}
 

@@ -141,6 +141,7 @@ export function createOllamaProvider(
 					isFreeModel({ ...model, provider: PROVIDER_OLLAMA }, models),
 				);
 			},
+			stored,
 		);
 	}
 
