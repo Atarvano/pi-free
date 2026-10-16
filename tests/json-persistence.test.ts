@@ -5,6 +5,7 @@
 import {
 	existsSync,
 	mkdirSync,
+	readdirSync,
 	rmdirSync,
 	unlinkSync,
 	writeFileSync,
@@ -77,6 +78,30 @@ describe("JSON Persistence", () => {
 				count: 0,
 			});
 			expect(store2.load().count).toBe(2);
+		});
+
+		it("update sees writes made by another process (#611)", async () => {
+			const store = createJSONStore<{ n: number }>(testFile, { n: 0 });
+			await store.update((data) => ({ n: data.n + 1 }));
+			expect(store.load().n).toBe(1);
+
+			// Another OS process writes directly: same bytes on disk, no
+			// shared memory. Building the next update on the memoized load
+			// would replay the stale base and lose this write.
+			writeFileSync(testFile, JSON.stringify({ n: 100 }));
+			await store.update((data) => ({ n: data.n + 1 }));
+			expect(store.load().n).toBe(101);
+		});
+
+		it("save leaves no tmp files behind", () => {
+			const store = createJSONStore<{ n: number }>(testFile, { n: 0 });
+			store.save({ n: 1 });
+			store.save({ n: 2 });
+			const residue = readdirSync(TEST_DIR).filter((entry) =>
+				entry.includes(".tmp."),
+			);
+			expect(residue).toEqual([]);
+			expect(store.load().n).toBe(2);
 		});
 	});
 

@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Concurrent pi processes no longer lose shared-state updates** — two processes sharing one home raced read-modify-write on `~/.pi/free.json` and the JSON stores: the mutexes were in-process promise chains and writes overwrote in place, so the loser's update silently vanished (reproduced pre-fix with two processes racing the real paths: 48/200 `updateConfig` keys survived, store counter 102/200). All shared writes now run inside a cross-process lockdir lock with the read taken inside it, and every write is tmp + fsync + rename, so readers never see a torn file and a crash leaves old-or-new, never partial. One shared seam (`lib/atomic-file.ts`) replaces `ConfigLock` and the `json-persistence.ts` mutex; stale locks from crashed holders are busted by pid-liveness/age caps and acquisition times out rather than hanging. Guards: `tests/atomic-file.test.ts`, cross-process regression in `tests/json-persistence.test.ts`, two-process probe transcript ([#611](https://github.com/apmantza/pi-free/issues/611)).
+
 ## [2.8.5] - 2026-10-15
 
 ### Fixed
