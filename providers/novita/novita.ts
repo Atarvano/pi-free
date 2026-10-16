@@ -74,6 +74,18 @@ interface NovitaModel {
  */
 const INTERNAL_TEST_MODEL_PATTERN = /^ai_infer_test/;
 
+/**
+ * Generation-output modalities: models producing these cannot serve as chat
+ * agents even when text is also listed (fastrouter applies the same rule
+ * through the shared fetcher's excludeOutputModalities).
+ */
+const NON_CHAT_OUTPUT_MODALITIES: ReadonlySet<string> = new Set([
+	"image",
+	"audio",
+	"video",
+	"speech",
+]);
+
 // =============================================================================
 // Fetch
 // =============================================================================
@@ -108,6 +120,16 @@ export async function fetchNovitaModels(
 		const json = (await response.json()) as { data?: NovitaModel[] };
 		const models = (json.data ?? [])
 			.filter((m) => m.status === 1 && m.model_type === "chat")
+			// Generation-output models (image/video/audio) cannot serve as
+			// chat agents even when text is also listed (2 live on
+			// 2026-10-15, #608). Vision *understanding* (input modalities)
+			// stays: it is legitimate chat input.
+			.filter(
+				(m) =>
+					!(m.output_modalities ?? []).some((mod) =>
+						NON_CHAT_OUTPUT_MODALITIES.has(mod),
+					),
+			)
 			// Novita exposes internal smoke-test entries (`ai_infer_test_1..3`)
 			// as zero-priced chat models; they are not usable endpoints.
 			.filter((m) => !INTERNAL_TEST_MODEL_PATTERN.test(m.id));

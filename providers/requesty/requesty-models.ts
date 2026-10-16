@@ -33,6 +33,7 @@ interface RequestyCatalogModel {
 	supports_reasoning?: unknown;
 	supports_tool_calling?: unknown;
 	supports_vision?: unknown;
+	supports_image_generation?: unknown;
 	description?: unknown;
 }
 
@@ -56,6 +57,10 @@ export function mapRequestyModel(
 	// The /models endpoint also serves image-generation and other api types;
 	// only chat completions are usable as an agent model.
 	if (entry.api !== "chat") return undefined;
+	// Image-generation models are served through the chat surface but cannot
+	// act as agent chat models (23 live on 2026-10-15, #608). Vision
+	// *understanding* (supports_vision) stays: it is legitimate chat input.
+	if (entry.supports_image_generation === true) return undefined;
 	// NVIDIA NIM guard classifiers are served through the chat surface but
 	// cannot hold a conversation.
 	if (entry.id.includes("content-safety")) return undefined;

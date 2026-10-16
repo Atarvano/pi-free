@@ -140,6 +140,29 @@ describe("mapRequestyModel", () => {
 			true,
 		);
 	});
+
+	it("drops image-generation models despite the chat api (#608)", () => {
+		// Live shape (router.requesty.ai, 2026-10-15): 23 image models are
+		// served with api "chat", so the api filter alone keeps them.
+		const model = mapRequestyModel(
+			catalogEntry({
+				id: "google/gemini-3.1-flash-image",
+				supports_image_generation: true,
+			}),
+		);
+		// Pre-fix this maps to a chat model and registers as an agent model.
+		expect(model).toBeUndefined();
+	});
+
+	it("keeps vision-understanding chat models without the generation flag", () => {
+		const model = mapRequestyModel(
+			catalogEntry({
+				id: "meta-llama/Llama-3.2-90B-Vision-Instruct",
+				supports_image_generation: false,
+			}),
+		);
+		expect(model?.id).toBe("meta-llama/Llama-3.2-90B-Vision-Instruct");
+	});
 });
 
 describe("fetchRequestyModels", () => {
