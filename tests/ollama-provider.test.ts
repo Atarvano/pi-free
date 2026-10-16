@@ -55,6 +55,14 @@ vi.mock("../lib/provider-cache.ts", () => ({
 	loadProviderCache: () => undefined,
 	saveProviderCache: (providerId: string, models: unknown[]) =>
 		mockSaveProviderCache(providerId, models),
+	// The guarded variant delegates to the same recording mock and reports
+	// success: these suites pin call-site behavior, while the guard's own
+	// shrink/empty rules are pinned against the real module in
+	// provider-cache.test.ts and ollama-cache-guard.test.ts.
+	saveProviderCacheGuarded: async (providerId: string, models: unknown[]) => {
+		await mockSaveProviderCache(providerId, models);
+		return true;
+	},
 }));
 
 vi.mock("../lib/probe-cache.ts", () => ({

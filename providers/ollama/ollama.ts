@@ -30,7 +30,7 @@ import {
 import { createLogger } from "../../lib/logger.ts";
 import {
 	loadProviderCache,
-	saveProviderCache,
+	saveProviderCacheGuarded,
 } from "../../lib/provider-cache.ts";
 import {
 	getModelsDueForProbe,
@@ -601,7 +601,12 @@ async function fetchAllModels(
 	return applyHidden(models, PROVIDER_OLLAMA);
 }
 
-async function runOllamaProbe(
+/**
+ * Probe configured models, auto-hide 403s, and refresh the cache.
+ * Exported for the cache-guard regression test (#607); production
+ * reaches it through OLLAMA_PROVIDER_DEPS.probeModels.
+ */
+export async function runOllamaProbe(
 	apiKey: string,
 	modelsToTest: ProviderModelConfig[],
 	applyModels: (models: ProviderModelConfig[]) => void,
@@ -661,13 +666,21 @@ async function runOllamaProbe(
 		return { hidden_models: Array.from(existingHidden) };
 	});
 
-	// Re-fetch and re-register so hidden models disappear immediately
+	// Re-fetch and re-register so hidden models disappear immediately.
+	// Guarded like the native paths: a degenerate re-fetch keeps the
+	// previous cache AND the live list instead of poisoning both (#607).
 	try {
 		const fresh = await fetchAllModels(
 			apiKey,
 			loadProviderCache(PROVIDER_OLLAMA),
 		);
-		await saveProviderCache(PROVIDER_OLLAMA, fresh);
+		if (!(await saveProviderCacheGuarded(PROVIDER_OLLAMA, fresh))) {
+			_logger.warn(
+				"Ollama post-probe refresh returned a degenerate list; keeping current models",
+				{ fetched: fresh.length },
+			);
+			return notFound;
+		}
 		applyModels(fresh);
 	} catch (error) {
 		// If refresh fails, keep current models. The next refresh/probe will
