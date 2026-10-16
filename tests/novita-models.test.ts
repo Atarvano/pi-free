@@ -86,4 +86,35 @@ describe("fetchNovitaModels — internal test model filtering", () => {
 			"minimax/m2-her",
 		]);
 	});
+
+	it("drops generation-output models despite the chat type (#608)", async () => {
+		// Live shape (api.novita.ai, 2026-10-15): ming-image entries declare
+		// model_type "chat" but output image/video/audio — unusable as
+		// agent chat models.
+		stubModels([
+			entry(),
+			entry({
+				id: "ming-image-0.1-design",
+				display_name: "Ming Image",
+				output_modalities: ["text", "image", "video", "audio"],
+			}),
+		]);
+
+		const models = await fetchNovitaModels("sk-test");
+		// Pre-fix the image model registers as a chat model.
+		expect(models.map((m) => m.id)).toEqual(["qwen/qwen3.5-plus"]);
+	});
+
+	it("keeps vision-understanding chat models", async () => {
+		stubModels([
+			entry({
+				id: "qwen/qwen3-vl-plus",
+				input_modalities: ["text", "image"],
+				output_modalities: ["text"],
+			}),
+		]);
+
+		const models = await fetchNovitaModels("sk-test");
+		expect(models.map((m) => m.id)).toEqual(["qwen/qwen3-vl-plus"]);
+	});
 });
