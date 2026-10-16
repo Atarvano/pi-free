@@ -1033,6 +1033,11 @@ export function applyHidden<T extends { id: string }>(
 	const hidden = new Set(loadConfigFile().hidden_models ?? []);
 	if (hidden.size === 0) return models;
 
+	// Provider-wide hide (#572): `${providerId}/*` drops the provider's whole
+	// catalog without enumerating per-model entries. Written by
+	// /hide-provider and cleared by /show-provider.
+	if (providerId && hidden.has(`${providerId}/*`)) return [];
+
 	return models.filter((m) => {
 		// Check provider-scoped ID (preferred format: "provider/model-id")
 		if (providerId && hidden.has(`${providerId}/${m.id}`)) {
@@ -1057,6 +1062,39 @@ export function applyHidden<T extends { id: string }>(
 function writeConfigFile(contents: string): void {
 	writeFileAtomicSync(CONFIG_PATH, contents, 0o600);
 	restrictConfigFilePermissions();
+}
+
+/**
+ * True when every model of `providerId` is hidden (#572). The marker is the
+ * `providerId/*` wildcard in `hidden_models`, so provider-wide hiding shares
+ * one store (and one cross-process lock) with per-model hiding.
+ */
+export function isProviderHidden(providerId: string): boolean {
+	return (loadConfigFile().hidden_models ?? []).includes(`${providerId}/*`);
+}
+
+/**
+ * Hide or show every model of one provider (#572). Atomic RMW over the
+ * `hidden_models` array, so concurrent toggles/probes cannot clobber each
+ * other; per-model entries for the provider are preserved (a later
+ * /show-provider reveals the provider but keeps individually hidden models).
+ * Returns the resulting hidden state.
+ */
+export async function setProviderHidden(
+	providerId: string,
+	hidden: boolean,
+): Promise<boolean> {
+	const marker = `${providerId}/*`;
+	await updateConfig((current) => {
+		const existing = new Set(current.hidden_models ?? []);
+		if (hidden) {
+			existing.add(marker);
+		} else {
+			existing.delete(marker);
+		}
+		return { hidden_models: Array.from(existing) };
+	});
+	return hidden;
 }
 
 export async function saveConfig(updates: ConfigPatch): Promise<void> {
